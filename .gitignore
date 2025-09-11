@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+venv/
+.venv/
+
+# IDEs
+.idea/
+.vscode/
+
+# Dados locais
+data/raw/
+data/silver/
+data/gold/

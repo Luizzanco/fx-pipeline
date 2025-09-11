@@ -1,0 +1,18 @@
+api:
+  base_url: "${EXCHANGE_BASE_URL}"
+  key: "${EXCHANGE_API_KEY}"
+  default_base: "USD"
+
+paths:
+  raw: "data/raw"
+  silver: "data/silver"
+  gold: "data/gold"
+
+validation:
+  min_rate: 0.0000001
+  allowed_currencies: []   # lista vazia = aceita todas. Pode incluir ['USD', 'EUR', ...]
+
+db:
+  enabled: false
+  url: "${DB_URL}"
+  table_name: "fx_rates"

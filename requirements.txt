@@ -1,0 +1,10 @@
+requests
+python-dotenv
+pyyaml
+pandas
+pyarrow
+fastparquet
+sqlalchemy
+psycopg2-binary      # para Postgres (opcional)
+mysql-connector-python  # para MySQL (opcional)
+pydantic              # validação (opcional)
