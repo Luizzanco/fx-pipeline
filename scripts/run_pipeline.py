@@ -1,55 +1,56 @@
-import os
-import pandas as pd
-from pipeline.config import load_config
+import logging
+from pathlib import Path
+
+# Import dos módulos da pipeline
 from pipeline.ingest import ingest_rates
 from pipeline.transform import transform_raw_to_silver
-from pipeline.load import load_rates
-from pipeline.enrich import generate_summary
-from pipeline.logger import log
-import openai  # Cliente OpenAI
+from pipeline.load import load_to_gold
 
-def run_pipeline():
+# Configuração de logging estruturado
+logging.basicConfig(
+    format='{"time": "%(asctime)s", "level": "%(levelname)s", "name": "%(name)s", "message": "%(message)s"}',
+    level=logging.INFO
+)
+logger = logging.getLogger("pipeline")
+
+# Diretórios padrão
+RAW_DIR = Path("data/raw")
+SILVER_DIR = Path("data/silver")
+GOLD_FILE = Path("data/gold/fx_rates_latest.parquet")
+
+# Cria os diretórios se não existirem
+RAW_DIR.mkdir(parents=True, exist_ok=True)
+SILVER_DIR.mkdir(parents=True, exist_ok=True)
+GOLD_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def run_pipeline(base_currency="USD"):
+    """Executa a pipeline FX end-to-end: ingest -> transform -> load"""
     try:
-        # 1️⃣ Carregar configuração
-        cfg = load_config()
-        log.info("Iniciando pipeline FX", extra={"event": "pipeline_start"})
+        logger.info("Iniciando pipeline FX")
 
-        # 2️⃣ Ingestão
-        raw_file = ingest_rates(cfg)
-        log.info(f"Ingest sucesso: {raw_file}", extra={"event": "ingest_success"})
+        # 1. Ingest
+        logger.info(f"Iniciando ingest para {base_currency}")
+        raw_file = ingest_rates(base_currency=base_currency, output_dir=str(RAW_DIR))
+        logger.info(f"Ingest sucesso: {raw_file}")
 
-        # 3️⃣ Transformação
-        silver_file = transform_raw_to_silver(raw_file, cfg)
-        log.info(f"Transform sucesso: {silver_file}", extra={"event": "transform_success"})
+        # 2. Transform
+        silver_file_path = SILVER_DIR / f"fx_rates_{base_currency}.parquet"
+        logger.info(f"Iniciando transformação raw -> silver: {silver_file_path}")
+        transform_raw_to_silver(str(raw_file), str(silver_file_path))
+        logger.info(f"Transform sucesso: {silver_file_path}")
 
-        # Ler parquet para próximos passos
-        df_silver = pd.read_parquet(silver_file)
+        # 3. Load
+        logger.info("Iniciando load para camada gold")
+        load_to_gold(silver_file_path, str(GOLD_FILE))
+        logger.info(f"Load sucesso: {GOLD_FILE}")
 
-        # 4️⃣ Load
-        gold_file = load_rates(df_silver)
-        log.info(f"Load sucesso: {gold_file}", extra={"event": "load_success"})
+        logger.info("Pipeline concluída com sucesso!")
 
-        # 5️⃣ Enriquecimento LLM com tratamento genérico de erros
-        summary = "Resumo LLM não gerado."
-        if os.path.exists(gold_file):
-            df_gold = pd.read_parquet(gold_file)
-            try:
-                summary = generate_summary(df_gold, base_currency="BRL")
-                log.info(f"Resumo LLM gerado:\n{summary}", extra={"event": "llm_success"})
-            except Exception as e:
-                log.error(f"Erro ao gerar resumo LLM: {e}", extra={"event": "llm_failed"})
-                summary = "Resumo LLM não gerado por erro ou limite de cota."
-            print("\n📊 Resumo Executivo (LLM):\n")
-            print(summary)
-        else:
-            log.error("Arquivo gold não encontrado.", extra={"event": "llm_failed"})
-
-        log.info("Pipeline finalizada com sucesso", extra={"event": "pipeline_end"})
+        return GOLD_FILE
 
     except Exception as e:
-        log.error(f"Pipeline falhou: {e}", extra={"event": "pipeline_failed"})
-        print("❌ Pipeline falhou:", e)
-
+        logger.error(f"Pipeline falhou: {e}")
+        raise
 
 if __name__ == "__main__":
     run_pipeline()

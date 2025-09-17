@@ -1,30 +1,30 @@
-import requests
+import os
 import json
+import requests
+from datetime import datetime
 from pathlib import Path
-from .utils import setup_logger, filename_for_date, now_iso
 
-logger = setup_logger("ingest")
 
-def ingest_rates(cfg):
-    base_url = cfg["api"]["base_url"].rstrip("/")
-    api_key = cfg["api"]["key"]
-    base = cfg["api"].get("default_base", "USD")
+def ingest_rates(base_currency: str, output_dir: str) -> str:
+    """
+    Faz a ingestão das taxas de câmbio e salva em JSON (camada raw).
 
-    # Many exchangerate-api endpoints use /v6/YOUR-KEY/latest/USD pattern (adjust if different)
-    url = f"{base_url}/{api_key}/latest/{base}"
-    logger.info(f"Fetching rates from {url}")
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
+    Args:
+        base_currency (str): Moeda base (ex: "USD").
+        output_dir (str): Diretório onde salvar o arquivo JSON.
+
+    Returns:
+        str: Caminho final do arquivo salvo.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    url = f"https://open.er-api.com/v6/latest/{base_currency}"
+    resp = requests.get(url)
     data = resp.json()
+    data["_ingested_at"] = datetime.utcnow().isoformat()
 
-    # attach ingest timestamp
-    data["_ingested_at"] = now_iso()
+    file_path = Path(output_dir) / f"fx_rates_{base_currency}.json"
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-    raw_dir = Path(cfg["paths"]["raw"])
-    filename = filename_for_date(prefix="", ext="json")
-    target = raw_dir / filename
-    logger.info(f"Saving raw JSON to {target}")
-    with open(target, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-    return target
+    return str(file_path)
